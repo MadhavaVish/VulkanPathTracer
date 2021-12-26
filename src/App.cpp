@@ -1,190 +1,163 @@
 #include "App.hpp"
 
+#include "VPTCamera.hpp"
+#include "simple_render_system.hpp"
+#include "keyboard_movement_controller.hpp"
+
 #include <stdexcept>
 #include <array>
 #include <cassert>
+#include <chrono>
+
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 
 namespace VPT
 {
-
 	App::App()
 	{
-		loadModels();
-		createPipelineLayout();
-		recreateSwapChain();
-		createCommandBuffers();
+		loadSceneObjects();
 	}
 	App::~App()
 	{
-		vkDestroyPipelineLayout(vptDevice.device(), vptPipelineLayout, nullptr);
 	}
 	void App::run()
 	{
+		SimpleRenderSystem simpleRenderSystem{vptDevice, vptRenderer.getSwapChainRenderPass()};
+		VPTCamera camera{};
+		auto viewerObject = VPTSceneObject::createSceneObject();
+
+		KeyboardMovementController cameraController{};
+		auto currentTime = std::chrono::high_resolution_clock::now();
+
 		while (!vptWindow.shouldClose())
 		{
 			glfwPollEvents();
-			drawFrame();
-		}
-		vkDeviceWaitIdle(vptDevice.device());
-	}
 
-	void App::loadModels()
-	{
-		std::vector<VPTModel::Vertex> vertices{
-			{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-			{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-			{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
-		vptModel = std::make_unique<VPTModel>(vptDevice, vertices);
-	}
-	void App::createPipelineLayout()
-	{
-		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 0;
-		pipelineLayoutInfo.pSetLayouts = nullptr;
-		pipelineLayoutInfo.pushConstantRangeCount = 0;
-		pipelineLayoutInfo.pPushConstantRanges = nullptr;
-		if (vkCreatePipelineLayout(vptDevice.device(), &pipelineLayoutInfo, nullptr, &vptPipelineLayout) != VK_SUCCESS)
-		{
-			throw std::runtime_error("failed to create pipeline layout");
-		}
-	}
-	void App::createPipeline()
-	{
-		assert(vptSwapChain != nullptr && "cannot create pipeline before swapchain");
-		assert(vptPipelineLayout != nullptr && "cannot create pipeline before pipeline layout");
-		PipelineConfigInfo pipelineConfig{};
-		VPTPipeline::defaultPipelineConfigInfo(pipelineConfig);
-		pipelineConfig.renderPass = vptSwapChain->getRenderPass();
-		pipelineConfig.pipelineLayout = vptPipelineLayout;
-		vptPipeline = std::make_unique<VPTPipeline>(
-			vptDevice,
-			"shaders/simple_shader.vert.spv",
-			"shaders/simple_shader.frag.spv",
-			pipelineConfig);
-	}
+			auto newTime = std::chrono::high_resolution_clock::now();
+			float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
+			currentTime = newTime;
 
-	void App::recreateSwapChain()
-	{
-		auto extent = vptWindow.getExtent();
-		while (extent.width == 0 || extent.height == 0)
-		{
-			extent = vptWindow.getExtent();
-			glfwWaitEvents();
-		}
-		vkDeviceWaitIdle(vptDevice.device());
-		if (vptSwapChain == nullptr)
-		{
-			vptSwapChain = std::make_unique<VPTSwapChain>(vptDevice, extent);
-		}
-		else
-		{
-			vptSwapChain = std::make_unique<VPTSwapChain>(vptDevice, extent, std::move(vptSwapChain));
-			if(vptSwapChain->imageCount() != commandBuffers.size())
+			cameraController.moveInPlaneXZ(vptWindow.getGLFWWindow(), frameTime, viewerObject);
+			camera.setViewYXZ(viewerObject.transform.translation, viewerObject.transform.rotation);
+
+			float aspect = vptRenderer.getAspectRatio();
+			camera.setPerspectiveProjection(glm::radians(50.f), aspect, .1, 10);
+			if (auto commandBuffer = vptRenderer.beginFrame())
 			{
-				freeCommandBuffers();
-				createCommandBuffers();
+				vptRenderer.beginSwapChainRenderPass(commandBuffer);
+				simpleRenderSystem.renderSceneObjects(commandBuffer, vptSceneObjects, camera);
+				vptRenderer.endSwapChainRenderPass(commandBuffer);
+				vptRenderer.endFrame();
 			}
 		}
-		createPipeline();
+		vkDeviceWaitIdle(vptDevice.device());
+		// VPTImgui vptImgui{
+		// 	vptWindow,
+		// 	vptDevice,
+		// 	vptRenderer.getSwapChainRenderPass(),
+		// 	vptRenderer.getImageCount()};
+
+		// SimpleRenderSystem simpleRenderSystem{vptDevice, vptRenderer.getSwapChainRenderPass()};
+		// while (!vptWindow.shouldClose()) {
+		// 	glfwPollEvents();
+
+		// 	if (auto commandBuffer = vptRenderer.beginFrame()) {
+		// 		// tell imgui that we're starting a new frame
+		// 		vptImgui.newFrame();
+
+		// 		vptRenderer.beginSwapChainRenderPass(commandBuffer);
+
+		// 		// render game objects first, so they will be rendered in the background. This
+		// 		// is the best we can do for now.
+		// 		// Once we cover offscreen rendering, we can render the scene to a image/texture rather than
+		// 		// directly to the swap chain. This texture of the scene can then be rendered to an imgui
+		// 		// subwindow
+		// 		simpleRenderSystem.renderSceneObjects(commandBuffer, vptSceneObjects);
+
+		// 		// example code telling imgui what windows to render, and their contents
+		// 		// this can be replaced with whatever code/classes you set up configuring your
+		// 		// desired engine UI
+		// 		vptImgui.runExample();
+
+		// 		// as last step in render pass, record the imgui draw commands
+		// 		vptImgui.render(commandBuffer);
+
+		// 		vptRenderer.endSwapChainRenderPass(commandBuffer);
+		// 		vptRenderer.endFrame();
+		// 	}
+		// }
 	}
-	void App::createCommandBuffers()
-	{
-		commandBuffers.resize(vptSwapChain->imageCount());
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandPool = vptDevice.getCommandPool();
-		allocInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
 
-		if (vkAllocateCommandBuffers(vptDevice.device(), &allocInfo, commandBuffers.data()) != VK_SUCCESS)
+	std::unique_ptr<VPTModel> createCubeModel(VPTDevice &device, glm::vec3 offset)
+	{
+		std::vector<VPTModel::Vertex> vertices{
+
+			// left face (white)
+			{{-.5f, -.5f, -.5f}, {.9f, .9f, .9f}},
+			{{-.5f, .5f, .5f}, {.9f, .9f, .9f}},
+			{{-.5f, -.5f, .5f}, {.9f, .9f, .9f}},
+			{{-.5f, -.5f, -.5f}, {.9f, .9f, .9f}},
+			{{-.5f, .5f, -.5f}, {.9f, .9f, .9f}},
+			{{-.5f, .5f, .5f}, {.9f, .9f, .9f}},
+
+			// right face (yellow)
+			{{.5f, -.5f, -.5f}, {.8f, .8f, .1f}},
+			{{.5f, .5f, .5f}, {.8f, .8f, .1f}},
+			{{.5f, -.5f, .5f}, {.8f, .8f, .1f}},
+			{{.5f, -.5f, -.5f}, {.8f, .8f, .1f}},
+			{{.5f, .5f, -.5f}, {.8f, .8f, .1f}},
+			{{.5f, .5f, .5f}, {.8f, .8f, .1f}},
+
+			// top face (orange, remember y axis points down)
+			{{-.5f, -.5f, -.5f}, {.9f, .6f, .1f}},
+			{{.5f, -.5f, .5f}, {.9f, .6f, .1f}},
+			{{-.5f, -.5f, .5f}, {.9f, .6f, .1f}},
+			{{-.5f, -.5f, -.5f}, {.9f, .6f, .1f}},
+			{{.5f, -.5f, -.5f}, {.9f, .6f, .1f}},
+			{{.5f, -.5f, .5f}, {.9f, .6f, .1f}},
+
+			// bottom face (red)
+			{{-.5f, .5f, -.5f}, {.8f, .1f, .1f}},
+			{{.5f, .5f, .5f}, {.8f, .1f, .1f}},
+			{{-.5f, .5f, .5f}, {.8f, .1f, .1f}},
+			{{-.5f, .5f, -.5f}, {.8f, .1f, .1f}},
+			{{.5f, .5f, -.5f}, {.8f, .1f, .1f}},
+			{{.5f, .5f, .5f}, {.8f, .1f, .1f}},
+
+			// nose face (blue)
+			{{-.5f, -.5f, 0.5f}, {.1f, .1f, .8f}},
+			{{.5f, .5f, 0.5f}, {.1f, .1f, .8f}},
+			{{-.5f, .5f, 0.5f}, {.1f, .1f, .8f}},
+			{{-.5f, -.5f, 0.5f}, {.1f, .1f, .8f}},
+			{{.5f, -.5f, 0.5f}, {.1f, .1f, .8f}},
+			{{.5f, .5f, 0.5f}, {.1f, .1f, .8f}},
+
+			// tail face (green)
+			{{-.5f, -.5f, -0.5f}, {.1f, .8f, .1f}},
+			{{.5f, .5f, -0.5f}, {.1f, .8f, .1f}},
+			{{-.5f, .5f, -0.5f}, {.1f, .8f, .1f}},
+			{{-.5f, -.5f, -0.5f}, {.1f, .8f, .1f}},
+			{{.5f, -.5f, -0.5f}, {.1f, .8f, .1f}},
+			{{.5f, .5f, -0.5f}, {.1f, .8f, .1f}},
+
+		};
+		for (auto &v : vertices)
 		{
-			throw std::runtime_error("failed to allocate command buffers");
+			v.position += offset;
 		}
+		return std::make_unique<VPTModel>(device, vertices);
 	}
-	void App::freeCommandBuffers()
+
+	void App::loadSceneObjects()
 	{
-		vkFreeCommandBuffers(
-			vptDevice.device(),
-			vptDevice.getCommandPool(),
-			static_cast<uint32_t>(commandBuffers.size()),
-			commandBuffers.data());
-		commandBuffers.clear();
-	}
-	void App::recordCommandBuffer(int imageIndex)
-	{
-		VkCommandBufferBeginInfo beginInfo{};
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-		if (vkBeginCommandBuffer(commandBuffers[imageIndex], &beginInfo) != VK_SUCCESS)
-		{
-			throw std::runtime_error("failed to begin recording command buffer");
-		}
-
-		VkRenderPassBeginInfo renderPassInfo{};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = vptSwapChain->getRenderPass();
-		renderPassInfo.framebuffer = vptSwapChain->getFrameBuffer(imageIndex);
-
-		renderPassInfo.renderArea.offset = {0, 0};
-		renderPassInfo.renderArea.extent = vptSwapChain->getSwapChainExtent();
-
-		std::array<VkClearValue, 2> clearValues{};
-		clearValues[0].color = {0.1f, 0.1f, 0.1f, 1.0f};
-		clearValues[1].depthStencil = {1.0f, 0};
-
-		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-		renderPassInfo.pClearValues = clearValues.data();
-
-		vkCmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-		VkViewport viewport{};
-		viewport.x = 0.0f;
-		viewport.y = 0.0f;
-		viewport.width = static_cast<float>(vptSwapChain->getSwapChainExtent().width);
-		viewport.height = static_cast<float>(vptSwapChain->getSwapChainExtent().height);
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
-		VkRect2D scissor{{0, 0}, vptSwapChain->getSwapChainExtent()};
-		vkCmdSetViewport(commandBuffers[imageIndex], 0, 1, &viewport);
-		vkCmdSetScissor(commandBuffers[imageIndex], 0, 1, &scissor);
-
-		vptPipeline->bind(commandBuffers[imageIndex]);
-		vptModel->bind(commandBuffers[imageIndex]);
-		vptModel->draw(commandBuffers[imageIndex]);
-
-		vkCmdEndRenderPass(commandBuffers[imageIndex]);
-		if (vkEndCommandBuffer(commandBuffers[imageIndex]) != VK_SUCCESS)
-		{
-			throw std::runtime_error("failed to record command buffer");
-		}
-	}
-	void App::drawFrame()
-	{
-		uint32_t imageIndex;
-		auto result = vptSwapChain->acquireNextImage(&imageIndex);
-
-		if (result == VK_ERROR_OUT_OF_DATE_KHR)
-		{
-			recreateSwapChain();
-			return;
-		}
-
-		if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
-		{
-			throw std::runtime_error("failed to acquire swap chain image");
-		}
-		recordCommandBuffer(imageIndex);
-		result = vptSwapChain->submitCommandBuffers(&commandBuffers[imageIndex], &imageIndex);
-		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || result == vptWindow.wasWindowResized())
-		{
-			vptWindow.resetWindowResizedFlag();
-			recreateSwapChain();
-			return;
-		}
-		if (result != VK_SUCCESS)
-		{
-			throw std::runtime_error("failed to present swap chain image");
-		}
+		std::shared_ptr<VPTModel> vptModel = createCubeModel(vptDevice, {.0f, .0f, .0f});
+		auto cube = VPTSceneObject::createSceneObject();
+		cube.model = vptModel;
+		cube.transform.translation = {0.f, 0.f, 2.5f};
+		cube.transform.scale = {.5f, .5f, .5f};
+		vptSceneObjects.push_back(std::move(cube));
 	}
 }

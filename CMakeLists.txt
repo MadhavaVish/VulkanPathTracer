@@ -14,6 +14,15 @@ add_executable(VulkanPathTracer
     src/VPTSwapChain.hpp
     src/VPTModel.cpp
     src/VPTModel.hpp
+    src/VPTSceneObject.hpp
+    src/VPTRenderer.cpp
+    src/VPTRenderer.hpp
+    src/simple_render_system.hpp
+    src/simple_render_system.cpp
+    src/VPTCamera.cpp
+    src/VPTCamera.hpp
+    src/keyboard_movement_controller.cpp
+    src/keyboard_movement_controller.hpp
 )
 LINK_DIRECTORIES(
     C:/vcpkg/installed/x64-windows/lib
@@ -44,4 +53,8 @@ add_custom_command(TARGET ${PROJECT_NAME}
 add_custom_command(TARGET ${PROJECT_NAME}  POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_SOURCE_DIR}/src/shaders/compiled
-                $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders)        
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders)       
+add_custom_command(TARGET ${PROJECT_NAME}  POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/src/shaders/compiled
+                ${CMAKE_CURRENT_BINARY_DIR}/shaders)                   

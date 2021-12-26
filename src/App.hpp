@@ -1,11 +1,9 @@
 #pragma once
 
 #include "VPTWindow.hpp"
-#include "VPTPipeline.hpp"
 #include "VPTDevice.hpp"
-#include "VPTSwapChain.hpp"
-#include "VPTModel.hpp"
-
+#include "VPTRenderer.hpp"
+#include "VPTSceneObject.hpp"
 #include <memory>
 #include <vector>
 
@@ -24,24 +22,13 @@ namespace VPT {
 
 		void run();
 	private:
-		void loadModels();
-		void createPipelineLayout();
-		void createPipeline();
-		void createCommandBuffers();
-		void freeCommandBuffers();
-		void drawFrame();
-		void recreateSwapChain();
-		void recordCommandBuffer(int imageIndex);
+		void loadSceneObjects();
 		
 
 		VPTWindow vptWindow{ WIDTH,HEIGHT, "YO waddup" };
 		VPTDevice vptDevice{vptWindow};
-		std::unique_ptr<VPTSwapChain> vptSwapChain;
-
-		std::unique_ptr<VPTPipeline> vptPipeline;
-		VkPipelineLayout vptPipelineLayout;
-		std::vector<VkCommandBuffer> commandBuffers;
-		std::unique_ptr<VPTModel> vptModel;
+		VPTRenderer vptRenderer{vptWindow, vptDevice};
+		std::vector<VPTSceneObject> vptSceneObjects;
 	};
 
 }

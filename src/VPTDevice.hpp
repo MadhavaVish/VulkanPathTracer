@@ -43,6 +43,10 @@ class VPTDevice {
   VkSurfaceKHR surface() { return surface_; }
   VkQueue graphicsQueue() { return graphicsQueue_; }
   VkQueue presentQueue() { return presentQueue_; }
+  VkInstance getInstance() { return instance; }
+  VkPhysicalDevice getPhysicalDevice() { return physicalDevice; }
+  uint32_t getGraphicsQueueFamily() { return findPhysicalQueueFamilies().graphicsFamily; }
+
 
   SwapChainSupportDetails getSwapChainSupport() { return querySwapChainSupport(physicalDevice); }
   uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);

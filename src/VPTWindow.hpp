@@ -21,7 +21,7 @@ namespace VPT
 		bool wasWindowResized(){return frameBufferResized;}
 		void resetWindowResizedFlag(){frameBufferResized = false;}
 		void createWindowSurface(VkInstance instance, VkSurfaceKHR *surface);
-
+		GLFWwindow *getGLFWWindow() const { return window; }
 	private:
 		static void frameBufferResizedCallback(GLFWwindow *window, int width, int height);
 		void initWindow();
